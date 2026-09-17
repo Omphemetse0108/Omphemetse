@@ -43,4 +43,10 @@ public class StudentsControllerTests
         var payload = new { status = "healthy" };
         Assert.Equal("healthy", payload.status);
     }
+
+    [Fact]
+    public void DeliberateFailure()
+    {
+        Assert.True(false, "Deliberate failure to demonstrate CI blocking a merge.");
+    }
 }
