@@ -1,0 +1,34 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+[Oo]ut/
+publish/
+*.dll
+*.exe
+*.pdb
+
+# Test/coverage
+[Tt]est[Rr]esult*/
+coverage*.xml
+coverage*.json
+coverage-report/
+*.trx
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Secrets (never commit)
+.env
+*.pfx
+*.key
+appsettings.Development.json
+appsettings.Production.json
+secrets.json

@@ -1,0 +1,130 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, 'feature/**', 'fix/**' ]
+  pull_request:
+    branches: [ main ]
+
+env:
+  DOTNET_VERSION: '9.0.x'
+  DOTNET_NOLOGO: true
+  DOTNET_SKIP_FIRST_TIME_EXPERIENCE: true
+
+jobs:
+  build-test:
+    name: Build, Test & Publish
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Cache NuGet packages
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: ${{ runner.os }}-nuget-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            ${{ runner.os }}-nuget-
+
+      - name: Restore dependencies
+        run: dotnet restore
+
+      - name: Build (Release)
+        run: dotnet build --no-restore --configuration Release
+
+      - name: Run tests with coverage
+        run: >
+          dotnet test --no-build --configuration Release
+          --logger "trx;LogFileName=test-results.trx"
+          --collect:"XPlat Code Coverage"
+          --results-directory ./TestResults
+
+      - name: Install ReportGenerator
+        run: dotnet tool install -g dotnet-reportgenerator-globaltool
+
+      - name: Generate coverage report
+        run: >
+          reportgenerator
+          -reports:"./TestResults/**/coverage.cobertura.xml"
+          -targetdir:"./coverage-report"
+          -reporttypes:"Html;Cobertura;MarkdownSummaryGithub"
+
+      - name: Add coverage summary to job summary
+        run: cat ./coverage-report/SummaryGithub.md >> $GITHUB_STEP_SUMMARY
+
+      - name: Enforce minimum coverage (50%)
+        run: |
+          COVERAGE=$(grep -oP 'line-rate="\K[0-9.]+' ./coverage-report/Cobertura.xml | head -1)
+          PCT=$(awk "BEGIN {printf \"%.2f\", $COVERAGE*100}")
+          echo "Line coverage: $PCT%"
+          if (( $(echo "$PCT < 50" | bc -l) )); then
+            echo "::error::Coverage $PCT% is below threshold 50%"
+            exit 1
+          fi
+
+      - name: Run .NET analyzers (warnings as errors)
+        run: >
+          dotnet build --no-restore --configuration Release
+          -p:TreatWarningsAsErrors=true
+          -p:RunAnalyzers=true
+
+      - name: Check vulnerable packages
+        run: |
+          set -eo pipefail
+          dotnet list package --vulnerable --include-transitive 2>&1 | tee vuln.txt
+          if grep -q "has the following vulnerable packages" vuln.txt; then
+            echo "::error::Vulnerable dependencies detected"
+            exit 1
+          fi
+
+      - name: Publish application
+        run: dotnet publish src/StudentServices.Api/StudentServices.Api.csproj -c Release -o ./publish
+
+      - name: Upload build output
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-build-${{ github.sha }}
+          path: ./publish
+          retention-days: 14
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ github.sha }}
+          path: ./TestResults
+
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-${{ github.sha }}
+          path: ./coverage-report
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          path: ./
+          format: spdx-json
+          output-file: sbom.spdx.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom-${{ github.sha }}
+          path: sbom.spdx.json
+          retention-days: 90
+
+      - name: Fail visibly on error
+        if: failure()
+        run: |
+          echo "::error::Build or tests failed — blocking merge."
+          exit 1
