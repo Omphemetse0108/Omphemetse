@@ -90,7 +90,7 @@ jobs:
         run: dotnet publish src/StudentServices.Api/StudentServices.Api.csproj -c Release -o ./publish
 
       - name: Upload build output
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: app-build-${{ github.sha }}
           path: ./publish
@@ -98,13 +98,13 @@ jobs:
 
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: test-results-${{ github.sha }}
           path: ./TestResults
 
       - name: Upload coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: coverage-report-${{ github.sha }}
           path: ./coverage-report
@@ -117,7 +117,7 @@ jobs:
           output-file: sbom.spdx.json
 
       - name: Upload SBOM
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v6
         with:
           name: sbom-${{ github.sha }}
           path: sbom.spdx.json
